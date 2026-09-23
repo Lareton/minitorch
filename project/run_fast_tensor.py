@@ -1,4 +1,5 @@
 import random
+import time
 
 import numba
 
@@ -70,8 +71,12 @@ class FastTrain:
         optim = minitorch.SGD(self.model.parameters(), learning_rate)
         BATCH = 10
         losses = []
+        self.epoch_times = []
 
-        for epoch in range(max_epochs):
+        for epoch in range(1, max_epochs + 1):
+            if self.backend.cuda:
+                numba.cuda.synchronize()
+            epoch_start = time.perf_counter()
             total_loss = 0.0
             c = list(zip(data.X, data.y))
             random.shuffle(c)
@@ -88,20 +93,29 @@ class FastTrain:
                 loss = -prob.log()
                 (loss / y.shape[0]).sum().view(1).backward()
 
-                total_loss = loss.sum().view(1)[0]
+                total_loss += loss.sum().view(1)[0]
 
                 # Update
                 optim.step()
 
+            if self.backend.cuda:
+                numba.cuda.synchronize()
+            self.epoch_times.append(time.perf_counter() - epoch_start)
             losses.append(total_loss)
             # Logging
-            if epoch % 10 == 0 or epoch == max_epochs:
+            if epoch == 1 or epoch % 10 == 0 or epoch == max_epochs:
                 X = minitorch.tensor(data.X, backend=self.backend)
                 y = minitorch.tensor(data.y, backend=self.backend)
                 out = self.model.forward(X).view(y.shape[0])
-                y2 = minitorch.tensor(data.y)
+                y2 = minitorch.tensor(data.y, backend=self.backend)
                 correct = int(((out.detach() > 0.5) == y2).sum()[0])
                 log_fn(epoch, total_loss, correct, losses)
+                if log_fn is default_log_fn:
+                    times = self.epoch_times[1:] or self.epoch_times
+                    print(
+                        f"Time per epoch: {self.epoch_times[-1]:.4f}s; "
+                        f"mean after first: {sum(times) / len(times):.4f}s"
+                    )
 
 
 if __name__ == "__main__":
@@ -111,24 +125,30 @@ if __name__ == "__main__":
     parser.add_argument("--PTS", type=int, default=50, help="number of points")
     parser.add_argument("--HIDDEN", type=int, default=10, help="number of hiddens")
     parser.add_argument("--RATE", type=float, default=0.05, help="learning rate")
-    parser.add_argument("--BACKEND", default="cpu", help="backend mode")
+    parser.add_argument("--BACKEND", choices=["cpu", "gpu"], default="cpu")
     parser.add_argument("--DATASET", default="simple", help="dataset")
-    parser.add_argument("--PLOT", default=False, help="dataset")
+    parser.add_argument("--EPOCHS", type=int, default=500)
+    parser.add_argument("--SEED", type=int, default=42)
 
     args = parser.parse_args()
 
-    PTS = args.PTS
+    if args.BACKEND == "gpu" and not numba.cuda.is_available():
+        parser.error("CUDA is not available; use --BACKEND cpu or run on an NVIDIA GPU")
+    if args.PTS <= 0 or args.HIDDEN <= 0 or args.EPOCHS <= 0:
+        parser.error("PTS, HIDDEN and EPOCHS must be positive")
+    names = {name.lower(): name for name in datasets}
+    if args.DATASET.lower() == "all":
+        selected = list(datasets)
+    elif args.DATASET.lower() in names:
+        selected = [names[args.DATASET.lower()]]
+    else:
+        parser.error("Unknown dataset: " + args.DATASET)
 
-    if args.DATASET == "xor":
-        data = minitorch.datasets["Xor"](PTS)
-    elif args.DATASET == "simple":
-        data = minitorch.datasets["Simple"].simple(PTS)
-    elif args.DATASET == "split":
-        data = minitorch.datasets["Split"](PTS)
-
-    HIDDEN = int(args.HIDDEN)
-    RATE = args.RATE
-
-    FastTrain(
-        HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
-    ).train(data, RATE)
+    backend = FastTensorBackend if args.BACKEND == "cpu" else GPUBackend
+    for name in selected:
+        random.seed(args.SEED)
+        data = datasets[name](args.PTS)
+        print(f"Dataset: {name}", flush=True)
+        FastTrain(args.HIDDEN, backend=backend).train(
+            data, args.RATE, max_epochs=args.EPOCHS
+        )

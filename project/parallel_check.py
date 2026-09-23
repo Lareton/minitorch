@@ -1,7 +1,15 @@
+import argparse
+
 from numba import njit
 
 import minitorch
 import minitorch.fast_ops
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--matmul", action="store_true", help="Also check Task 3.2 matrix multiplication"
+)
+args = parser.parse_args()
 
 # MAP
 print("MAP")
@@ -27,14 +35,15 @@ treduce(*out.tuple(), *a.tuple(), 0)
 print(treduce.parallel_diagnostics(level=3))
 
 
-# MM
-print("MATRIX MULTIPLY")
-out, a, b = (
-    minitorch.zeros((1, 10, 10)),
-    minitorch.zeros((1, 10, 20)),
-    minitorch.zeros((1, 20, 10)),
-)
-tmm = minitorch.fast_ops.tensor_matrix_multiply
+# Matrix multiplication belongs to Task 3.2.
+if args.matmul:
+    print("MATRIX MULTIPLY")
+    out, a, b = (
+        minitorch.zeros((1, 10, 10)),
+        minitorch.zeros((1, 10, 20)),
+        minitorch.zeros((1, 20, 10)),
+    )
+    tmm = minitorch.fast_ops.tensor_matrix_multiply
 
-tmm(*out.tuple(), *a.tuple(), *b.tuple())
-print(tmm.parallel_diagnostics(level=3))
+    tmm(*out.tuple(), *a.tuple(), *b.tuple())
+    print(tmm.parallel_diagnostics(level=3))

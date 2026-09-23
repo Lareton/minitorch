@@ -43,7 +43,10 @@ def index_to_position(index: Index, strides: Strides) -> int:
         Position in storage
     """
 
-    return sum([index[i] * strides[i] for i in range(len(index))])
+    position = 0
+    for i in range(len(strides)):
+        position += index[i] * strides[i]
+    return position
 
 
 def to_index(ordinal: int, shape: Shape, out_index: OutIndex) -> None:
@@ -59,9 +62,10 @@ def to_index(ordinal: int, shape: Shape, out_index: OutIndex) -> None:
         out_index : return index corresponding to position.
 
     """
+    divisor = 1
     for i in range(len(shape) - 1, -1, -1):
-        out_index[i] = ordinal % shape[i]
-        ordinal //= shape[i]
+        out_index[i] = (ordinal // divisor) % shape[i]
+        divisor *= shape[i]
 
 
 def broadcast_index(
@@ -140,7 +144,7 @@ class TensorData:
         shape: UserShape,
         strides: Optional[UserStrides] = None,
     ):
-        if isinstance(storage, np.ndarray):
+        if isinstance(storage, np.ndarray) or hasattr(storage, "copy_to_host"):
             self._storage = storage
         else:
             self._storage = array(storage, dtype=float64)
@@ -161,7 +165,7 @@ class TensorData:
         assert len(self._storage) == self.size
 
     def to_cuda_(self) -> None:  # pragma: no cover
-        if not numba.cuda.is_cuda_array(self._storage):
+        if isinstance(self._storage, np.ndarray):
             self._storage = numba.cuda.to_device(self._storage)
 
     def is_contiguous(self) -> bool:
