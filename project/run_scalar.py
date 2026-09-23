@@ -8,6 +8,8 @@ import minitorch
 
 
 class Network(minitorch.Module):
+    """Binary classifier: 2 inputs, two ReLU hidden layers, sigmoid output."""
+
     def __init__(self, hidden_layers):
         super().__init__()
         # ASSIGN1.5
@@ -24,6 +26,8 @@ class Network(minitorch.Module):
 
 
 class Linear(minitorch.Module):
+    """Fully connected layer with registered scalar weights and biases."""
+
     def __init__(self, in_size, out_size):
         super().__init__()
         self.weights = []
@@ -109,8 +113,10 @@ class ScalarTrain:
 
 
 if __name__ == "__main__":
+    # Make this training example reproducible, including data and initial weights.
+    random.seed(1)
     PTS = 50
     HIDDEN = 2
     RATE = 0.5
-    data = minitorch.datasets["Simple"](PTS)
-    ScalarTrain(HIDDEN).train(data, RATE)
+    DATASET = minitorch.datasets["Simple"](PTS)
+    ScalarTrain(HIDDEN).train(DATASET, RATE)

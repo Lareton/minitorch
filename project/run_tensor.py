@@ -3,6 +3,10 @@ Be sure you have minitorch installed in you Virtual Env.
 >>> pip install -Ue .
 """
 
+import argparse
+import random
+import time
+
 import minitorch
 
 
@@ -71,7 +75,9 @@ class TensorTrain:
         y = minitorch.tensor(data.y)
 
         losses = []
+        self.epoch_times = []
         for epoch in range(1, self.max_epochs + 1):
+            epoch_start = time.perf_counter()
             total_loss = 0.0
             correct = 0
             optim.zero_grad()
@@ -87,17 +93,37 @@ class TensorTrain:
 
             # Update
             optim.step()
+            self.epoch_times.append(time.perf_counter() - epoch_start)
 
             # Logging
-            if epoch % 10 == 0 or epoch == max_epochs:
+            if epoch == 1 or epoch % 10 == 0 or epoch == max_epochs:
                 y2 = minitorch.tensor(data.y)
                 correct = int(((out.detach() > 0.5) == y2).sum()[0])
                 log_fn(epoch, total_loss, correct, losses)
+                if log_fn is default_log_fn:
+                    print(
+                        f"Time per epoch: {self.epoch_times[-1]:.4f}s; "
+                        f"mean: {sum(self.epoch_times) / len(self.epoch_times):.4f}s"
+                    )
 
 
 if __name__ == "__main__":
-    PTS = 50
-    HIDDEN = 2
-    RATE = 0.5
-    data = minitorch.datasets["Simple"](PTS)
-    TensorTrain(HIDDEN).train(data, RATE)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", choices=[*minitorch.datasets, "all"], default="Simple")
+    parser.add_argument("--points", type=int, default=50)
+    parser.add_argument("--hidden", type=int, default=2)
+    parser.add_argument("--rate", type=float, default=0.5)
+    parser.add_argument("--epochs", type=int, default=500)
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args()
+
+    names = list(minitorch.datasets) if args.dataset == "all" else [args.dataset]
+    for name in names:
+        random.seed(args.seed)
+        data = minitorch.datasets[name](args.points)
+        print(f"Dataset: {name}", flush=True)
+        trainer = TensorTrain(args.hidden)
+        trainer.train(data, args.rate, max_epochs=args.epochs)
+        predictions = trainer.run_many(data.X).view(data.N)
+        correct = sum((predictions[i] > 0.5) == data.y[i] for i in range(data.N))
+        print(f"Final accuracy after update: {correct}/{data.N}", flush=True)
